@@ -13,6 +13,20 @@
     <string name="server_username">Email</string>
     <string name="server_password">Password</string>
     <string name="title_dashboard">Dashboard</string>
+    <string name="select_node">Select Node</string>
+    <string name="renew_purchase">Renew / Purchase</string>
+    <string name="data_usage">Data Usage</string>
+    <string name="node_selected">Node selected</string>
+    <string name="please_select_node">Please select a node first</string>
+    <string name="login">Login</string>
+    <string name="register">Register</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="no_account">Don\'t have an account? Register</string>
+    <string name="plan_id">Plan ID: %s</string>
+    <string name="standard_plan">Standard Plan</string>
+    <string name="expires">Expires: %s</string>
+    <string name="api_url_hint">API URL</string>
+    <string name="loading_failed">Failed to load data</string>
     
     <string name="version_x">Version (%s)</string>
     <string name="logcat">Export debug information</string>

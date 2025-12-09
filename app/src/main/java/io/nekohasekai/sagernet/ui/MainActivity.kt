@@ -9,14 +9,17 @@ import android.os.Build
 import android.os.Bundle
 import android.os.RemoteException
 import android.view.KeyEvent
-import android.view.MenuItem
+import android.view.View
+import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceDataStore
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.navigation.NavigationView
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.snackbar.Snackbar
 import io.nekohasekai.sagernet.BuildConfig
 import io.nekohasekai.sagernet.GroupType
@@ -34,7 +37,6 @@ import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.database.ProxyGroup
 import io.nekohasekai.sagernet.database.SubscriptionBean
 import io.nekohasekai.sagernet.database.preference.OnPreferenceDataStoreChangeListener
-import io.nekohasekai.sagernet.databinding.LayoutMainBinding
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.KryoConverters
 import io.nekohasekai.sagernet.fmt.PluginEntry
@@ -52,11 +54,12 @@ import moe.matsuri.nb4a.utils.Util
 
 class MainActivity : ThemedActivity(),
     SagerConnection.Callback,
-    OnPreferenceDataStoreChangeListener,
-    NavigationView.OnNavigationItemSelectedListener {
+    OnPreferenceDataStoreChangeListener {
 
-    lateinit var binding: LayoutMainBinding
-    lateinit var navigation: NavigationView
+    private lateinit var bottomNav: BottomNavigationView
+    private lateinit var vpnSwitch: MaterialSwitch
+    private lateinit var vpnStatusText: TextView
+    private lateinit var mainContainer: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,39 +70,45 @@ class MainActivity : ThemedActivity(),
             return
         }
 
-        binding = LayoutMainBinding.inflate(layoutInflater)
-        binding.fab.initProgress(binding.fabProgress)
-        if (themeResId !in intArrayOf(
-                R.style.Theme_SagerNet_Black
-            )
-        ) {
-            navigation = binding.navView
-            binding.drawerLayout.removeView(binding.navViewBlack)
-        } else {
-            navigation = binding.navViewBlack
-            binding.drawerLayout.removeView(binding.navView)
+        setContentView(R.layout.layout_main)
+
+        mainContainer = findViewById(R.id.main_container)
+        bottomNav = findViewById(R.id.bottom_navigation)
+        vpnSwitch = findViewById(R.id.vpnSwitch)
+        vpnStatusText = findViewById(R.id.vpnStatusText)
+
+        // Setup bottom navigation
+        bottomNav.setOnItemSelectedListener { item ->
+            displayFragmentWithId(item.itemId)
         }
-        navigation.setNavigationItemSelectedListener(this)
+
+        // Setup VPN Switch
+        vpnSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !DataStore.serviceState.canStop) {
+                if (DataStore.selectedProxy == 0L) {
+                    vpnSwitch.isChecked = false
+                    snackbar(getString(R.string.please_select_node)).show()
+                } else {
+                    connect.launch(null)
+                }
+            } else if (!isChecked && DataStore.serviceState.canStop) {
+                SagerNet.stopService()
+            }
+        }
 
         if (savedInstanceState == null) {
             displayFragmentWithId(R.id.nav_configuration)
         }
+
         onBackPressedDispatcher.addCallback {
-            if (supportFragmentManager.findFragmentById(R.id.fragment_holder) is ConfigurationFragment) {
+            val currentFragment = supportFragmentManager.findFragmentById(R.id.fragment_holder)
+            if (currentFragment is DashboardFragment) {
                 moveTaskToBack(true)
             } else {
                 displayFragmentWithId(R.id.nav_configuration)
             }
         }
 
-        binding.fab.setOnClickListener {
-            if (DataStore.serviceState.canStop) SagerNet.stopService() else connect.launch(
-                null
-            )
-        }
-        binding.stats.setOnClickListener { if (DataStore.serviceState.connected) binding.stats.testConnection() }
-
-        setContentView(binding.root)
         changeState(BaseService.State.Idle)
         connection.connect(this, this)
         DataStore.configurationStore.registerChangeListener(this)
@@ -109,17 +118,11 @@ class MainActivity : ThemedActivity(),
             onNewIntent(intent)
         }
 
-        refreshNavMenu(DataStore.enableClashAPI)
-
-        // sdk 33 notification
+        // SDK 33 notification permission
         if (Build.VERSION.SDK_INT >= 33) {
-            val checkPermission =
-                ContextCompat.checkSelfPermission(this@MainActivity, POST_NOTIFICATIONS)
+            val checkPermission = ContextCompat.checkSelfPermission(this, POST_NOTIFICATIONS)
             if (checkPermission != PackageManager.PERMISSION_GRANTED) {
-                //动态申请
-                ActivityCompat.requestPermissions(
-                    this@MainActivity, arrayOf(POST_NOTIFICATIONS), 0
-                )
+                ActivityCompat.requestPermissions(this, arrayOf(POST_NOTIFICATIONS), 0)
             }
         }
 
@@ -132,51 +135,45 @@ class MainActivity : ThemedActivity(),
         }
     }
 
-    fun refreshNavMenu(clashApi: Boolean) {
-        if (::navigation.isInitialized) {
-            navigation.menu.findItem(R.id.nav_traffic)?.isVisible = clashApi
-            navigation.menu.findItem(R.id.nav_tuiguang)?.isVisible = !isPlay
-        }
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-
         val uri = intent.data ?: return
-
         runOnDefaultDispatcher {
             if (uri.scheme == "sn" && uri.host == "subscription" || uri.scheme == "clash") {
                 importSubscription(uri)
             } else {
-                importProfile(uri)
+                try {
+                    val proxies = parseProxies(Util.getContentFromUri(this@MainActivity, uri))
+                    if (!proxies.isNullOrEmpty()) {
+                        for (proxy in proxies) {
+                            importProfile(proxy)
+                        }
+                    }
+                } catch (e: Exception) {
+                    onMainDispatcher {
+                        alert(e.readableMessage).show()
+                    }
+                }
             }
         }
     }
 
-    fun urlTest(): Int {
-        if (!DataStore.serviceState.connected || connection.service == null) {
-            error("not started")
-        }
-        return connection.service!!.urlTest()
-    }
-
     suspend fun importSubscription(uri: Uri) {
         val group: ProxyGroup
-
         val url = uri.getQueryParameter("url")
         if (!url.isNullOrBlank()) {
             group = ProxyGroup(type = GroupType.SUBSCRIPTION)
             val subscription = SubscriptionBean()
             group.subscription = subscription
-
-            // cleartext format
             subscription.link = url
             group.name = uri.getQueryParameter("name")
         } else {
             val data = uri.encodedQuery.takeIf { !it.isNullOrBlank() } ?: return
             try {
                 group = KryoConverters.deserialize(
-                    ProxyGroup().apply { export = true }, Util.zlibDecompress(Util.b64Decode(data))
+                    ProxyGroup().apply {
+                        export = false
+                    }, Util.zlibDecompress(Util.b64Decode(data))
                 ).apply {
                     export = false
                 }
@@ -188,29 +185,16 @@ class MainActivity : ThemedActivity(),
             }
         }
 
-        val name = group.name.takeIf { !it.isNullOrBlank() } ?: group.subscription?.link
-        ?: group.subscription?.token
-        if (name.isNullOrBlank()) return
-
         group.name = group.name.takeIf { !it.isNullOrBlank() }
             ?: ("Subscription #" + System.currentTimeMillis())
 
+        // Auto-import without confirmation dialog
+        finishImportSubscription(group)
+
         onMainDispatcher {
-
-            displayFragmentWithId(R.id.nav_group)
-
-            MaterialAlertDialogBuilder(this@MainActivity).setTitle(R.string.subscription_import)
-                .setMessage(getString(R.string.subscription_import_message, name))
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    runOnDefaultDispatcher {
-                        finishImportSubscription(group)
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-
+            displayFragmentWithId(R.id.nav_configuration)
+            snackbar(getString(R.string.subscription_import) + ": " + group.name).show()
         }
-
     }
 
     private suspend fun finishImportSubscription(subscription: ProxyGroup) {
@@ -218,148 +202,45 @@ class MainActivity : ThemedActivity(),
         GroupUpdater.startUpdate(subscription, true)
     }
 
-    suspend fun importProfile(uri: Uri) {
-        val profile = try {
-            parseProxies(uri.toString()).getOrNull(0) ?: error(getString(R.string.no_proxies_found))
-        } catch (e: Exception) {
-            onMainDispatcher {
-                alert(e.readableMessage).show()
-            }
-            return
-        }
-
-        onMainDispatcher {
-            MaterialAlertDialogBuilder(this@MainActivity).setTitle(R.string.profile_import)
-                .setMessage(getString(R.string.profile_import_message, profile.displayName()))
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    runOnDefaultDispatcher {
-                        finishImportProfile(profile)
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
-
-    }
-
-    private suspend fun finishImportProfile(profile: AbstractBean) {
+    private suspend fun importProfile(profile: AbstractBean) {
         val targetId = DataStore.selectedGroupForImport()
-
         ProfileManager.createProfile(targetId, profile)
-
         onMainDispatcher {
             displayFragmentWithId(R.id.nav_configuration)
-
             snackbar(resources.getQuantityString(R.plurals.added, 1, 1)).show()
         }
     }
 
     override fun missingPlugin(profileName: String, pluginName: String) {
         val pluginEntity = PluginEntry.find(pluginName)
-
-        // unknown exe or neko plugin
         if (pluginEntity == null) {
             snackbar(getString(R.string.plugin_unknown, pluginName)).show()
             return
         }
-
-        // official exe
-
         MaterialAlertDialogBuilder(this).setTitle(R.string.missing_plugin)
-            .setMessage(
-                getString(
-                    R.string.profile_requiring_plugin, profileName, pluginEntity.displayName
-                )
-            )
+            .setMessage(getString(R.string.profile_requiring_plugin, profileName, pluginEntity.displayName))
             .setPositiveButton(R.string.action_download) { _, _ ->
-                showDownloadDialog(pluginEntity)
+                launchCustomTab(pluginEntity.downloadSource.downloadLink)
             }
             .setNeutralButton(android.R.string.cancel, null)
-            .setNeutralButton(R.string.action_learn_more) { _, _ ->
-                launchCustomTab("https://matsuridayo.github.io/nb4a-plugin/")
-            }
             .show()
     }
-
-    private fun showDownloadDialog(pluginEntry: PluginEntry) {
-        var index = 0
-        var playIndex = -1
-        var fdroidIndex = -1
-
-        val items = mutableListOf<String>()
-        if (pluginEntry.downloadSource.playStore) {
-            items.add(getString(R.string.install_from_play_store))
-            playIndex = index++
-        }
-        if (pluginEntry.downloadSource.fdroid) {
-            items.add(getString(R.string.install_from_fdroid))
-            fdroidIndex = index++
-        }
-
-        items.add(getString(R.string.download))
-        val downloadIndex = index
-
-        MaterialAlertDialogBuilder(this).setTitle(pluginEntry.name)
-            .setItems(items.toTypedArray()) { _, which ->
-                when (which) {
-                    playIndex -> launchCustomTab("https://play.google.com/store/apps/details?id=${pluginEntry.packageName}")
-                    fdroidIndex -> launchCustomTab("https://f-droid.org/packages/${pluginEntry.packageName}/")
-                    downloadIndex -> launchCustomTab(pluginEntry.downloadSource.downloadLink)
-                }
-            }
-            .show()
-    }
-
-    override fun onNavigationItemSelected(item: MenuItem): Boolean {
-        if (item.isChecked) binding.drawerLayout.closeDrawers() else {
-            return displayFragmentWithId(item.itemId)
-        }
-        return true
-    }
-
 
     @SuppressLint("CommitTransaction")
-    fun displayFragment(fragment: ToolbarFragment) {
-        if (fragment is ConfigurationFragment) {
-            binding.stats.allowShow = true
-            binding.fab.show()
-        } else if (!DataStore.showBottomBar) {
-            binding.stats.allowShow = false
-            binding.stats.performHide()
-            binding.fab.hide()
-        }
+    private fun displayFragment(fragment: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_holder, fragment)
             .commitAllowingStateLoss()
-        binding.drawerLayout.closeDrawers()
     }
 
     fun displayFragmentWithId(@IdRes id: Int): Boolean {
         when (id) {
-            R.id.nav_configuration -> {
-                displayFragment(DashboardFragment())
-            }
-
-            R.id.nav_group -> displayFragment(GroupFragment())
+            R.id.nav_configuration -> displayFragment(DashboardFragment())
             R.id.nav_route -> displayFragment(RouteFragment())
-            R.id.nav_settings -> displayFragment(SettingsFragment())
-            R.id.nav_traffic -> displayFragment(WebviewFragment())
-            R.id.nav_tools -> displayFragment(ToolsFragment())
             R.id.nav_logcat -> displayFragment(LogcatFragment())
-            R.id.nav_faq -> {
-                launchCustomTab("https://matsuridayo.github.io/")
-                return false
-            }
-
-            R.id.nav_about -> displayFragment(AboutFragment())
-            R.id.nav_tuiguang -> {
-                launchCustomTab("https://neko-box.pages.dev/喵")
-                return false
-            }
-
+            R.id.nav_settings -> displayFragment(SettingsFragment())
             else -> return false
         }
-        navigation.menu.findItem(id).isChecked = true
         return true
     }
 
@@ -370,18 +251,32 @@ class MainActivity : ThemedActivity(),
     ) {
         DataStore.serviceState = state
 
-        binding.fab.changeState(state, DataStore.serviceState, animate)
-        binding.stats.changeState(state)
+        runOnUiThread {
+            when (state) {
+                BaseService.State.Connected -> {
+                    vpnSwitch.isChecked = true
+                    vpnStatusText.text = getString(R.string.vpn_connected)
+                    vpnStatusText.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+                }
+                BaseService.State.Connecting -> {
+                    vpnStatusText.text = getString(R.string.connecting)
+                }
+                BaseService.State.Stopping -> {
+                    vpnStatusText.text = getString(R.string.stopping)
+                }
+                else -> {
+                    vpnSwitch.isChecked = false
+                    vpnStatusText.text = getString(R.string.not_connected)
+                    vpnStatusText.setTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+                }
+            }
+        }
+
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
     }
 
     override fun snackbarInternal(text: CharSequence): Snackbar {
-        return Snackbar.make(binding.coordinator, text, Snackbar.LENGTH_LONG).apply {
-            if (binding.fab.isShown) {
-                anchorView = binding.fab
-            }
-            // TODO
-        }
+        return Snackbar.make(mainContainer, text, Snackbar.LENGTH_LONG)
     }
 
     override fun stateChanged(state: BaseService.State, profileName: String?, msg: String?) {
@@ -389,6 +284,7 @@ class MainActivity : ThemedActivity(),
     }
 
     val connection = SagerConnection(SagerConnection.CONNECTION_ID_MAIN_ACTIVITY_FOREGROUND, true)
+
     override fun onServiceConnected(service: ISagerNetService) = changeState(
         try {
             BaseService.State.values()[service.state]
@@ -407,10 +303,8 @@ class MainActivity : ThemedActivity(),
         if (it) snackbar(R.string.vpn_permission_denied).show()
     }
 
-    // may NOT called when app is in background
-    // ONLY do UI update here, write DB in bg process
     override fun cbSpeedUpdate(stats: SpeedDisplayData) {
-        binding.stats.updateSpeed(stats.txRateProxy, stats.rxRateProxy)
+        // Speed updates - could be shown in UI if needed
     }
 
     override fun cbTrafficUpdate(data: TrafficData) {
@@ -458,29 +352,4 @@ class MainActivity : ThemedActivity(),
         DataStore.configurationStore.unregisterChangeListener(this)
         connection.disconnect(this)
     }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (super.onKeyDown(keyCode, event)) return true
-                binding.drawerLayout.open()
-                navigation.requestFocus()
-            }
-
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (binding.drawerLayout.isOpen) {
-                    binding.drawerLayout.close()
-                    return true
-                }
-            }
-        }
-
-        if (super.onKeyDown(keyCode, event)) return true
-        if (binding.drawerLayout.isOpen) return false
-
-        val fragment =
-            supportFragmentManager.findFragmentById(R.id.fragment_holder) as? ToolbarFragment
-        return fragment != null && fragment.onKeyDown(keyCode, event)
-    }
-
 }

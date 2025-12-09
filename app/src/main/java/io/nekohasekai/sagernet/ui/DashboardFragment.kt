@@ -4,15 +4,16 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import androidx.fragment.app.Fragment
 import com.google.gson.JsonObject
 import io.nekohasekai.sagernet.R
-import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.api.ApiClient
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.ProfileManager
@@ -22,7 +23,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.net.URLEncoder
 
-class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
+class DashboardFragment : Fragment() {
 
     private val selectProfileForNode = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -30,35 +31,37 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
         if (result.resultCode == Activity.RESULT_OK) {
             val profileId = result.data?.getLongExtra(ProfileSelectActivity.EXTRA_PROFILE_ID, -1L) ?: -1L
             if (profileId > 0) {
-                // Set the selected profile
                 val old = DataStore.selectedProxy
                 DataStore.selectedProxy = profileId
                 runOnDefaultDispatcher {
                     ProfileManager.postUpdate(old, true)
                     ProfileManager.postUpdate(profileId, true)
                 }
-                Toast.makeText(requireContext(), "Node selected", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.node_selected, Toast.LENGTH_SHORT).show()
             }
         }
     }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(R.layout.layout_dashboard, container, false)
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        toolbar.setTitle(R.string.title_dashboard)
 
         val planName = view.findViewById<TextView>(R.id.planName)
         val expiryDate = view.findViewById<TextView>(R.id.expiryDate)
         val trafficProgress = view.findViewById<ProgressBar>(R.id.trafficProgress)
         val trafficText = view.findViewById<TextView>(R.id.trafficText)
-        val connectButton = view.findViewById<FloatingActionButton>(R.id.connectButton)
-        val statusText = view.findViewById<TextView>(R.id.statusText)
 
-        // Fetch subscription data
         fetchSubscriptionData(planName, expiryDate, trafficProgress, trafficText)
 
         val nodeSelectorButton = view.findViewById<android.widget.Button>(R.id.nodeSelectorButton)
         nodeSelectorButton.setOnClickListener {
-            // Use startActivityForResult to receive the selected profile
             selectProfileForNode.launch(Intent(requireContext(), ProfileSelectActivity::class.java))
         }
 
@@ -68,21 +71,6 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
             if (!url.isNullOrEmpty()) {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 startActivity(intent)
-            }
-        }
-
-        // Connect Logic
-        connectButton.setOnClickListener {
-            if (DataStore.serviceState.canStop) {
-                SagerNet.stopService()
-            } else {
-                // Check if there is a selected profile
-                if (DataStore.selectedProxy == 0L) {
-                    Toast.makeText(requireContext(), "Please select a node first", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-                val intent = Intent(requireContext(), VpnRequestActivity::class.java)
-                requireContext().startActivity(intent)
             }
         }
     }
@@ -95,27 +83,24 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
     ) {
         ApiClient.service.getSubscribe().enqueue(object : Callback<JsonObject> {
             override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                if (!isAdded) return // Fragment not attached
+                if (!isAdded) return
 
                 if (response.isSuccessful) {
                     val data = response.body()?.getAsJsonObject("data")
                     if (data != null) {
-                        // Update plan name
                         planName.text = if (data.has("plan_id")) {
-                            "Plan ID: ${data.get("plan_id").asString}"
+                            getString(R.string.plan_id, data.get("plan_id").asString)
                         } else {
-                            "Standard Plan"
+                            getString(R.string.standard_plan)
                         }
 
-                        // Update expiry date
                         if (data.has("expired_at")) {
                             val expiredAt = data.get("expired_at").asLong
                             val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
                                 .format(java.util.Date(expiredAt * 1000))
-                            expiryDate.text = "Expires: $date"
+                            expiryDate.text = getString(R.string.expires, date)
                         }
 
-                        // Format traffic
                         val u = if (data.has("u")) data.get("u").asLong else 0L
                         val d = if (data.has("d")) data.get("d").asLong else 0L
                         val total = if (data.has("transfer_enable")) data.get("transfer_enable").asLong else 1024L * 1024L * 1024L
@@ -131,7 +116,6 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
                             0
                         }
 
-                        // Auto Import subscription (only once)
                         autoImportSubscription(data)
                     }
                 }
@@ -139,7 +123,7 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
 
             override fun onFailure(call: Call<JsonObject>, t: Throwable) {
                 if (!isAdded) return
-                Toast.makeText(requireContext(), "Failed to load data: ${t.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.loading_failed, Toast.LENGTH_SHORT).show()
             }
         })
     }
@@ -150,11 +134,9 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
         val subUrl = data.get("subscribe_url").asString
         if (subUrl.isEmpty()) return
 
-        // Check if we already imported (simple flag check)
         val lastImportedUrl = DataStore.configurationStore.getString("last_imported_sub_url")
         if (lastImportedUrl == subUrl) return
 
-        // Save to prevent duplicate imports
         DataStore.configurationStore.putString("last_imported_sub_url", subUrl)
 
         try {
@@ -165,7 +147,7 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
             intent.setPackage(act.packageName)
             act.startActivity(intent)
         } catch (e: Exception) {
-            // Ignore import errors
+            // Ignore
         }
     }
 }

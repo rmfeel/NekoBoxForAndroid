@@ -6,6 +6,26 @@
     <string name="telegram">Telegram 更新频道</string>
     <string name="oss_licenses">开放源代码协议</string>
     <string name="app_version">版本</string>
+    
+    <!-- Auth & Dashboard -->
+    <string name="server_username">邮箱</string>
+    <string name="server_password">密码</string>
+    <string name="title_dashboard">仪表盘</string>
+    <string name="select_node">选择节点</string>
+    <string name="renew_purchase">续费 / 购买</string>
+    <string name="data_usage">流量使用</string>
+    <string name="node_selected">节点已选择</string>
+    <string name="please_select_node">请先选择一个节点</string>
+    <string name="login">登录</string>
+    <string name="register">注册</string>
+    <string name="forgot_password">忘记密码?</string>
+    <string name="no_account">没有账号? 注册</string>
+    <string name="plan_id">套餐 ID: %s</string>
+    <string name="standard_plan">标准套餐</string>
+    <string name="expires">到期时间: %s</string>
+    <string name="api_url_hint">API 地址</string>
+    <string name="loading_failed">加载数据失败</string>
+    
     <string name="logcat">导出调试信息</string>
     <string name="menu_configuration">配置</string>
     <string name="menu_group">分组</string>
