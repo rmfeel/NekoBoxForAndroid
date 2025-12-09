@@ -6,14 +6,13 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.gson.JsonObject
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.api.ApiClient
 import io.nekohasekai.sagernet.database.DataStore
-import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
-import io.nekohasekai.sagernet.ktx.runOnMainDispatcher
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -32,76 +31,114 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
         val connectButton = view.findViewById<FloatingActionButton>(R.id.connectButton)
         val statusText = view.findViewById<TextView>(R.id.statusText)
 
-        // Fetch Data & Auto Import
-        runOnDefaultDispatcher {
-            ApiClient.service.getSubscribe().enqueue(object : Callback<JsonObject> {
-                override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                    if (response.isSuccessful) {
-                        val data = response.body()?.getAsJsonObject("data")
-                        if (data != null) {
-                            runOnMainDispatcher {
-                                planName.text = if(data.has("plan_id")) data.get("plan_id").asString else "Standard Plan"
-                                
-                                // format traffic
-                                val u = if(data.has("u")) data.get("u").asLong else 0L
-                                val d = if(data.has("d")) data.get("d").asLong else 0L
-                                val total = if(data.has("transfer_enable")) data.get("transfer_enable").asLong else 1024L*1024L*1024L
-                                val used = u + d
-                                
-                                val usedGb = used / 1024.0 / 1024.0 / 1024.0
-                                val totalGb = total / 1024.0 / 1024.0 / 1024.0
-                                
-                                trafficText.text = String.format("%.2f GB / %.2f GB", usedGb, totalGb)
-                                trafficProgress.progress = ((used.toDouble() / total.toDouble()) * 100).toInt()
-                            }
-                            
-                            // Auto Import
-                            if (data.has("subscribe_url")) {
-                                val subUrl = data.get("subscribe_url").asString
-                                if (subUrl.isNotEmpty()) {
-                                    runOnMainDispatcher {
-                                         val act = requireActivity() as MainActivity
-                                         val encodedUrl = URLEncoder.encode(subUrl, "UTF-8")
-                                         val uri = Uri.parse("sn://subscription?url=$encodedUrl&name=NekoBoxSub")
-                                         val intent = Intent(Intent.ACTION_VIEW, uri)
-                                         intent.setPackage(act.packageName)
-                                         act.startActivity(intent)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        // Fetch subscription data
+        fetchSubscriptionData(planName, expiryDate, trafficProgress, trafficText)
 
-                override fun onFailure(call: Call<JsonObject>, t: Throwable) {
-                }
-            })
-        }
-        
-        
         val nodeSelectorButton = view.findViewById<android.widget.Button>(R.id.nodeSelectorButton)
         nodeSelectorButton.setOnClickListener {
-             val intent = Intent(requireContext(), ProfileSelectActivity::class.java)
-             startActivity(intent)
+            val intent = Intent(requireContext(), ProfileSelectActivity::class.java)
+            startActivity(intent)
         }
-        
+
         val purchaseButton = view.findViewById<android.widget.Button>(R.id.purchaseButton)
         purchaseButton.setOnClickListener {
-             val url = DataStore.apiUrl
-             if (!url.isNullOrEmpty()) {
-                  val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                  startActivity(intent)
-             }
+            val url = DataStore.apiUrl
+            if (!url.isNullOrEmpty()) {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                startActivity(intent)
+            }
         }
 
         // Connect Logic
-         connectButton.setOnClickListener {
+        connectButton.setOnClickListener {
             if (DataStore.serviceState.canStop) {
                 SagerNet.stopService()
             } else {
-                 val intent = Intent(requireContext(), VpnRequestActivity::class.java)
-                 requireContext().startActivity(intent)
+                val intent = Intent(requireContext(), VpnRequestActivity::class.java)
+                requireContext().startActivity(intent)
             }
+        }
+    }
+
+    private fun fetchSubscriptionData(
+        planName: TextView,
+        expiryDate: TextView,
+        trafficProgress: ProgressBar,
+        trafficText: TextView
+    ) {
+        ApiClient.service.getSubscribe().enqueue(object : Callback<JsonObject> {
+            override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                if (!isAdded) return // Fragment not attached
+
+                if (response.isSuccessful) {
+                    val data = response.body()?.getAsJsonObject("data")
+                    if (data != null) {
+                        // Update plan name
+                        planName.text = if (data.has("plan_id")) {
+                            "Plan ID: ${data.get("plan_id").asString}"
+                        } else {
+                            "Standard Plan"
+                        }
+
+                        // Update expiry date
+                        if (data.has("expired_at")) {
+                            val expiredAt = data.get("expired_at").asLong
+                            val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                                .format(java.util.Date(expiredAt * 1000))
+                            expiryDate.text = "Expires: $date"
+                        }
+
+                        // Format traffic
+                        val u = if (data.has("u")) data.get("u").asLong else 0L
+                        val d = if (data.has("d")) data.get("d").asLong else 0L
+                        val total = if (data.has("transfer_enable")) data.get("transfer_enable").asLong else 1024L * 1024L * 1024L
+                        val used = u + d
+
+                        val usedGb = used / 1024.0 / 1024.0 / 1024.0
+                        val totalGb = total / 1024.0 / 1024.0 / 1024.0
+
+                        trafficText.text = String.format("%.2f GB / %.2f GB", usedGb, totalGb)
+                        trafficProgress.progress = if (total > 0) {
+                            ((used.toDouble() / total.toDouble()) * 100).toInt()
+                        } else {
+                            0
+                        }
+
+                        // Auto Import subscription (only once)
+                        autoImportSubscription(data)
+                    }
+                }
+            }
+
+            override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                if (!isAdded) return
+                Toast.makeText(requireContext(), "Failed to load data: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
+    }
+
+    private fun autoImportSubscription(data: JsonObject) {
+        if (!data.has("subscribe_url")) return
+        
+        val subUrl = data.get("subscribe_url").asString
+        if (subUrl.isEmpty()) return
+
+        // Check if we already imported (simple flag check)
+        val lastImportedUrl = DataStore.configurationStore.getString("last_imported_sub_url")
+        if (lastImportedUrl == subUrl) return
+
+        // Save to prevent duplicate imports
+        DataStore.configurationStore.putString("last_imported_sub_url", subUrl)
+
+        try {
+            val act = requireActivity() as MainActivity
+            val encodedUrl = URLEncoder.encode(subUrl, "UTF-8")
+            val uri = Uri.parse("sn://subscription?url=$encodedUrl&name=Subscription")
+            val intent = Intent(Intent.ACTION_VIEW, uri)
+            intent.setPackage(act.packageName)
+            act.startActivity(intent)
+        } catch (e: Exception) {
+            // Ignore import errors
         }
     }
 }
