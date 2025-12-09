@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.RemoteException
 import android.view.KeyEvent
 import android.view.View
+import android.view.animation.AnimationUtils
 import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.annotation.IdRes
@@ -257,6 +258,11 @@ class MainActivity : ThemedActivity(),
                     vpnSwitch.isChecked = true
                     vpnStatusText.text = getString(R.string.vpn_connected)
                     vpnStatusText.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+                    // Play pulse animation when connected
+                    if (animate) {
+                        val pulseAnimation = AnimationUtils.loadAnimation(this, R.anim.vpn_switch_pulse)
+                        vpnSwitch.startAnimation(pulseAnimation)
+                    }
                 }
                 BaseService.State.Connecting -> {
                     vpnStatusText.text = getString(R.string.connecting)
