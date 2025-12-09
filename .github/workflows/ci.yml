@@ -32,6 +32,9 @@ jobs:
       - name: Native Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
+          sudo apt-get install -y dos2unix
+          find . -name "*.sh" -exec dos2unix {} \;
+          dos2unix run gradlew
           chmod +x run
           ./run lib core
 
@@ -64,10 +67,13 @@ jobs:
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
           echo "ndk.dir=${ANDROID_HOME}/ndk/25.0.8775105" >> local.properties
           
-          chmod +x run
+          sudo apt-get install -y dos2unix
+          find . -name "*.sh" -exec dos2unix {} \;
+          dos2unix run gradlew
+          
+          chmod +x run gradlew
           ./run init action gradle
           
-          chmod +x gradlew
           # Try building Debug as it is safer for generic CI without secrets
           ./gradlew app:assembleOssDebug
       - uses: actions/upload-artifact@v4
