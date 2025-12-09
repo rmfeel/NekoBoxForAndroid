@@ -61,15 +61,12 @@ class MainActivity : ThemedActivity(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-<<<<<<< HEAD
         if (DataStore.authToken.isNullOrBlank()) {
             startActivity(Intent(this, io.nekohasekai.sagernet.ui.auth.LoginActivity::class.java))
             finish()
             return
         }
 
-=======
->>>>>>> 2c2b6dc1a839d24b08f3d8f384e4a88e84f1bfd2
         binding = LayoutMainBinding.inflate(layoutInflater)
         binding.fab.initProgress(binding.fabProgress)
         if (themeResId !in intArrayOf(
@@ -340,11 +337,7 @@ class MainActivity : ThemedActivity(),
     fun displayFragmentWithId(@IdRes id: Int): Boolean {
         when (id) {
             R.id.nav_configuration -> {
-<<<<<<< HEAD
                 displayFragment(DashboardFragment())
-=======
-                displayFragment(ConfigurationFragment())
->>>>>>> 2c2b6dc1a839d24b08f3d8f384e4a88e84f1bfd2
             }
 
             R.id.nav_group -> displayFragment(GroupFragment())

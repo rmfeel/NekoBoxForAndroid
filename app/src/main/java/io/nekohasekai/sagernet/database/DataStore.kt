@@ -164,13 +164,10 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     var yacdURL by configurationStore.string("yacdURL") { "http://127.0.0.1:9090/ui" }
 
-<<<<<<< HEAD
     var authToken by configurationStore.string(Key.AUTH_TOKEN)
     var apiUrl by configurationStore.string(Key.API_URL)
     var userInfo by configurationStore.string(Key.USER_INFO)
 
-=======
->>>>>>> 2c2b6dc1a839d24b08f3d8f384e4a88e84f1bfd2
     // protocol
 
     var globalAllowInsecure by configurationStore.boolean(Key.GLOBAL_ALLOW_INSECURE) { false }

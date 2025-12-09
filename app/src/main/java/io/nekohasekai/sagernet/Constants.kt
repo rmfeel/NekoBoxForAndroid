@@ -151,14 +151,11 @@ object Key {
 
     const val APP_TLS_VERSION = "appTLSVersion"
     const val ENABLE_CLASH_API = "enableClashAPI"
-<<<<<<< HEAD
 
     // Auth & API
     const val AUTH_TOKEN = "auth_token"
     const val API_URL = "api_url"
     const val USER_INFO = "user_info"
-=======
->>>>>>> 2c2b6dc1a839d24b08f3d8f384e4a88e84f1bfd2
 }
 
 object TunImplementation {
