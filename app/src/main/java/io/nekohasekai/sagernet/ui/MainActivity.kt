@@ -61,6 +61,7 @@ class MainActivity : ThemedActivity(),
     private lateinit var vpnSwitch: SwitchCompat
     private lateinit var vpnStatusText: TextView
     private lateinit var mainContainer: View
+    private lateinit var appBar: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,6 +78,7 @@ class MainActivity : ThemedActivity(),
         bottomNav = findViewById(R.id.bottom_navigation)
         vpnSwitch = findViewById(R.id.vpnSwitch)
         vpnStatusText = findViewById(R.id.vpnStatusText)
+        appBar = findViewById(R.id.appbar)
 
         // Setup bottom navigation
         bottomNav.setOnItemSelectedListener { item ->
@@ -235,6 +237,9 @@ class MainActivity : ThemedActivity(),
     }
 
     fun displayFragmentWithId(@IdRes id: Int): Boolean {
+        // Show AppBar only on Dashboard page
+        appBar.visibility = if (id == R.id.nav_configuration) View.VISIBLE else View.GONE
+        
         when (id) {
             R.id.nav_configuration -> displayFragment(DashboardFragment())
             R.id.nav_route -> displayFragment(RouteFragment())

@@ -25,6 +25,8 @@ import java.net.URLEncoder
 
 class DashboardFragment : Fragment() {
 
+    private var currentNodeName: TextView? = null
+
     private val selectProfileForNode = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -37,6 +39,8 @@ class DashboardFragment : Fragment() {
                     ProfileManager.postUpdate(old, true)
                     ProfileManager.postUpdate(profileId, true)
                 }
+                // Update displayed node name
+                updateCurrentNodeName(profileId)
                 Toast.makeText(requireContext(), R.string.node_selected, Toast.LENGTH_SHORT).show()
             }
         }
@@ -57,8 +61,12 @@ class DashboardFragment : Fragment() {
         val expiryDate = view.findViewById<TextView>(R.id.expiryDate)
         val trafficProgress = view.findViewById<ProgressBar>(R.id.trafficProgress)
         val trafficText = view.findViewById<TextView>(R.id.trafficText)
+        currentNodeName = view.findViewById(R.id.currentNodeName)
 
         fetchSubscriptionData(planName, expiryDate, trafficProgress, trafficText)
+
+        // Load current selected node name
+        loadCurrentNodeName()
 
         val nodeSelectorButton = view.findViewById<android.widget.Button>(R.id.nodeSelectorButton)
         nodeSelectorButton.setOnClickListener {
@@ -71,6 +79,29 @@ class DashboardFragment : Fragment() {
             if (!url.isNullOrEmpty()) {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 startActivity(intent)
+            }
+        }
+    }
+
+    private fun loadCurrentNodeName() {
+        val selectedId = DataStore.selectedProxy
+        if (selectedId > 0) {
+            updateCurrentNodeName(selectedId)
+        }
+    }
+
+    private fun updateCurrentNodeName(profileId: Long) {
+        runOnDefaultDispatcher {
+            try {
+                val profile = ProfileManager.getProfile(profileId)
+                if (profile != null && isAdded) {
+                    val name = profile.displayName()
+                    requireActivity().runOnUiThread {
+                        currentNodeName?.text = name
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore
             }
         }
     }
