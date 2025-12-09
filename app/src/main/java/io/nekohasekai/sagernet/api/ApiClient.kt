@@ -3,21 +3,21 @@ package io.nekohasekai.sagernet.api
 import io.nekohasekai.sagernet.database.DataStore
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
 
-    private const val BASE_URL = "https://your.api.endpoint.com" // TODO: Change this or make it configurable
+    private const val DEFAULT_BASE_URL = "https://your.api.endpoint.com/"
 
+    @Volatile
     private var retrofit: Retrofit? = null
+    
+    @Volatile
+    private var currentBaseUrl: String = ""
 
-    // Helper to get token (Assumes DataStore has been updated to store token)
     private fun getToken(): String? {
-        // We will need to add auth_token to DataStore
         return DataStore.authToken
     }
 
@@ -32,23 +32,47 @@ object ApiClient {
         chain.proceed(request)
     }
 
+    private fun buildRetrofit(baseUrl: String): Retrofit {
+        val okHttpClient = OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
+
+        // Ensure URL ends with /
+        val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+
+        return Retrofit.Builder()
+            .baseUrl(normalizedUrl)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    fun updateBaseUrl(newUrl: String) {
+        synchronized(this) {
+            val normalizedUrl = if (newUrl.endsWith("/")) newUrl else "$newUrl/"
+            if (normalizedUrl != currentBaseUrl) {
+                currentBaseUrl = normalizedUrl
+                retrofit = buildRetrofit(normalizedUrl)
+            }
+        }
+    }
+
     val client: Retrofit
         get() {
-            if (retrofit == null) {
-                val okHttpClient = OkHttpClient.Builder()
-                    .addInterceptor(authInterceptor)
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(15, TimeUnit.SECONDS)
-                    .writeTimeout(15, TimeUnit.SECONDS)
-                    .build()
-
-                retrofit = Retrofit.Builder()
-                    .baseUrl(DataStore.apiUrl.ifEmpty { BASE_URL })
-                    .client(okHttpClient)
-                    .addConverterFactory(GsonConverterFactory.create())
-                    .build()
+            synchronized(this) {
+                val savedUrl = DataStore.apiUrl
+                val baseUrl = if (!savedUrl.isNullOrEmpty()) savedUrl else DEFAULT_BASE_URL
+                val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+                
+                if (retrofit == null || currentBaseUrl != normalizedUrl) {
+                    currentBaseUrl = normalizedUrl
+                    retrofit = buildRetrofit(normalizedUrl)
+                }
+                return retrofit!!
             }
-            return retrofit!!
         }
 
     val service: ApiService

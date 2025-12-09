@@ -24,6 +24,7 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.layout_login)
 
+        val apiUrlInput = findViewById<TextInputEditText>(R.id.apiUrlInput)
         val emailInput = findViewById<TextInputEditText>(R.id.emailInput)
         val passwordInput = findViewById<TextInputEditText>(R.id.passwordInput)
         val loginButton = findViewById<Button>(R.id.loginButton)
@@ -31,14 +32,30 @@ class LoginActivity : AppCompatActivity() {
         val forgotPasswordText = findViewById<TextView>(R.id.forgotPasswordText)
         val loading = findViewById<ProgressBar>(R.id.loading)
 
+        // Load saved API URL
+        val savedUrl = DataStore.apiUrl
+        if (!savedUrl.isNullOrEmpty()) {
+            apiUrlInput.setText(savedUrl)
+        }
+
         loginButton.setOnClickListener {
+            val apiUrl = apiUrlInput.text.toString().trim()
             val email = emailInput.text.toString()
             val password = passwordInput.text.toString()
+
+            if (apiUrl.isBlank() || !apiUrl.startsWith("http")) {
+                Toast.makeText(this, "Please enter a valid API URL", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
             if (email.isBlank() || password.isBlank()) {
                 Toast.makeText(this, "Please enter email and password", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+
+            // Save API URL and rebuild client
+            DataStore.apiUrl = apiUrl
+            ApiClient.updateBaseUrl(apiUrl)
 
             loading.isVisible = true
             loginButton.isEnabled = false
@@ -60,10 +77,11 @@ class LoginActivity : AppCompatActivity() {
                             startActivity(intent)
                             finish()
                         } else {
-                            Toast.makeText(this@LoginActivity, "Login failed", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@LoginActivity, "Login failed: Invalid response", Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        Toast.makeText(this@LoginActivity, "Login failed", Toast.LENGTH_SHORT).show()
+                        val errorMsg = body?.get("message")?.asString ?: "Login failed"
+                        Toast.makeText(this@LoginActivity, errorMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
 
