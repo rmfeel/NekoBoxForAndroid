@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import com.google.android.material.textfield.TextInputEditText
@@ -12,10 +13,6 @@ import com.google.gson.JsonObject
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.api.ApiClient
 import io.nekohasekai.sagernet.database.DataStore
-import io.nekohasekai.sagernet.ktx.alert
-import io.nekohasekai.sagernet.ktx.onMainDispatcher
-import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
-import io.nekohasekai.sagernet.ktx.snackbar
 import io.nekohasekai.sagernet.ui.MainActivity
 import retrofit2.Call
 import retrofit2.Callback
@@ -39,59 +36,43 @@ class LoginActivity : AppCompatActivity() {
             val password = passwordInput.text.toString()
 
             if (email.isBlank() || password.isBlank()) {
-                // snackbar(getString(R.string.invalid_input)).show() // Assuming helper or string resource
+                Toast.makeText(this, "Please enter email and password", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             loading.isVisible = true
             loginButton.isEnabled = false
 
-            runOnDefaultDispatcher {
-                try {
-                    ApiClient.service.login(email, password).enqueue(object : Callback<JsonObject> {
-                        override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                            loading.isVisible = false
-                            loginButton.isEnabled = true
-                            
-                            val body = response.body()
-                            if (response.isSuccessful && body != null && body.has("data")) {
-                                val data = body.getAsJsonObject("data")
-                                if (data.has("auth_data")) {
-                                    val token = data.get("auth_data").asString
-                                    
-                                    // Save Token
-                                    DataStore.authToken = token
-                                    
-                                    // Navigate to Main
-                                    val intent = Intent(this@LoginActivity, MainActivity::class.java)
-                                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                    startActivity(intent)
-                                    finish()
-                                } else {
-                                     onMainDispatcher {
-                                        // Handle Login Fail
-                                    }
-                                }
-                            } else {
-                                onMainDispatcher {
-                                    // Handle Error
-                                }
-                            }
-                        }
-
-                        override fun onFailure(call: Call<JsonObject>, t: Throwable) {
-                            loading.isVisible = false
-                            loginButton.isEnabled = true
-                            onMainDispatcher {
-                                // Handle Network Error
-                            }
-                        }
-                    })
-                } catch (e: Exception) {
+            ApiClient.service.login(email, password).enqueue(object : Callback<JsonObject> {
+                override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
                     loading.isVisible = false
                     loginButton.isEnabled = true
+                    
+                    val body = response.body()
+                    if (response.isSuccessful && body != null && body.has("data")) {
+                        val data = body.getAsJsonObject("data")
+                        if (data.has("auth_data")) {
+                            val token = data.get("auth_data").asString
+                            DataStore.authToken = token
+                            
+                            val intent = Intent(this@LoginActivity, MainActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                        } else {
+                            Toast.makeText(this@LoginActivity, "Login failed", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(this@LoginActivity, "Login failed", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            }
+
+                override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                    loading.isVisible = false
+                    loginButton.isEnabled = true
+                    Toast.makeText(this@LoginActivity, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
         }
 
         registerText.setOnClickListener {

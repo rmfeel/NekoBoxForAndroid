@@ -1,6 +1,7 @@
 package io.nekohasekai.sagernet.ui
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ProgressBar
@@ -13,18 +14,16 @@ import io.nekohasekai.sagernet.api.ApiClient
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import io.nekohasekai.sagernet.ktx.runOnMainDispatcher
-import io.nekohasekai.sagernet.ui.VpnRequestActivity
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.net.URLEncoder
-import androidx.core.net.toUri
 
 class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setTitle(R.string.title_dashboard) // Ensure string exists or use literal
+        toolbar.setTitle(R.string.title_dashboard)
 
         val planName = view.findViewById<TextView>(R.id.planName)
         val expiryDate = view.findViewById<TextView>(R.id.expiryDate)
@@ -61,22 +60,12 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
                                 val subUrl = data.get("subscribe_url").asString
                                 if (subUrl.isNotEmpty()) {
                                     runOnMainDispatcher {
-                                         // Call MainActivity import
                                          val act = requireActivity() as MainActivity
-                                         // We need to parse URI.
-                                         // Usually subscription is link, so importSubscription(Uri.parse(link))
-                                         // But MainActivity expects special URI or just URL string?
-                                         // importSubscription takes Uri.
-                                         // If it's a http link, we construct "sn://subscription?url=..."
-                                         
-                                         // Simplified: Just trigger update if group exists, else create
-                                         // For now, let's assume we pass it to import logic
-                                         
-                                         // Verify if we already have this subscription?
-                                         // TODO: Logic to check duplicate
-                                         
-                                          val uri = androidx.core.net.toUri("sn://subscription?url=${java.net.URLEncoder.encode(subUrl, "UTF-8")}&name=NekoBoxSub")
-                                          act.onNewIntent(android.content.Intent(android.content.Intent.ACTION_VIEW, uri))
+                                         val encodedUrl = URLEncoder.encode(subUrl, "UTF-8")
+                                         val uri = Uri.parse("sn://subscription?url=$encodedUrl&name=NekoBoxSub")
+                                         val intent = Intent(Intent.ACTION_VIEW, uri)
+                                         intent.setPackage(act.packageName)
+                                         act.startActivity(intent)
                                     }
                                 }
                             }
@@ -92,21 +81,15 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
         
         val nodeSelectorButton = view.findViewById<android.widget.Button>(R.id.nodeSelectorButton)
         nodeSelectorButton.setOnClickListener {
-             // Open the GroupFragment or a Dialog to select node
-             // Simplified: Switch to Group Tab (if we kept it) or show a BottomSheet
-             // Launch ProfileSelectActivity
-             val intent = Intent(requireContext(), io.nekohasekai.sagernet.ui.ProfileSelectActivity::class.java)
+             val intent = Intent(requireContext(), ProfileSelectActivity::class.java)
              startActivity(intent)
         }
         
         val purchaseButton = view.findViewById<android.widget.Button>(R.id.purchaseButton)
         purchaseButton.setOnClickListener {
-             // Open Website
-             // Assuming DataStore.apiUrl is the base url, or we have a specific portal url
-             // For now, allow opening the generic site
-             val url = DataStore.apiUrl // Or user specific URL
-             if (url.isNotEmpty()) {
-                  val intent = Intent(Intent.ACTION_VIEW, androidx.core.net.toUri(url))
+             val url = DataStore.apiUrl
+             if (!url.isNullOrEmpty()) {
+                  val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                   startActivity(intent)
              }
         }
@@ -116,18 +99,9 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
             if (DataStore.serviceState.canStop) {
                 SagerNet.stopService()
             } else {
-                // Check if profile selected
-                // If not, maybe auto select first
-                if (DataStore.selectedProxy == 0L) {
-                     // logic to auto select
-                }
-                
-                // Launch
                  val intent = Intent(requireContext(), VpnRequestActivity::class.java)
                  requireContext().startActivity(intent)
             }
         }
-        
-        // Update Status UI based on DataStore.serviceState (Need observer or poll)
     }
 }

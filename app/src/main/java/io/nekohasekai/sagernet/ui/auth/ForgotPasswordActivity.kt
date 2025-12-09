@@ -2,13 +2,12 @@ package io.nekohasekai.sagernet.ui.auth
 
 import android.os.Bundle
 import android.widget.Button
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.textfield.TextInputEditText
 import com.google.gson.JsonObject
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.api.ApiClient
-import io.nekohasekai.sagernet.ktx.onMainDispatcher
-import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -28,15 +27,16 @@ class ForgotPasswordActivity : AppCompatActivity() {
         sendCodeButton.setOnClickListener {
              val email = emailInput.text.toString()
              if (email.isNotBlank()) {
-                 runOnDefaultDispatcher {
-                     ApiClient.service.sendEmailVerify(email).enqueue(object : Callback<JsonObject> {
-                         override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                             // Handle success/fail toast
+                 ApiClient.service.sendEmailVerify(email).enqueue(object : Callback<JsonObject> {
+                     override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                         if (response.isSuccessful) {
+                             Toast.makeText(this@ForgotPasswordActivity, "Code sent", Toast.LENGTH_SHORT).show()
                          }
-                         override fun onFailure(call: Call<JsonObject>, t: Throwable) {
-                         }
-                     })
-                 }
+                     }
+                     override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                         Toast.makeText(this@ForgotPasswordActivity, "Failed to send code", Toast.LENGTH_SHORT).show()
+                     }
+                 })
              }
         }
 
@@ -45,19 +45,19 @@ class ForgotPasswordActivity : AppCompatActivity() {
             val password = passwordInput.text.toString()
             val code = verifyCodeInput.text.toString()
 
-            runOnDefaultDispatcher {
-                ApiClient.service.forget(email, password, code).enqueue(object: Callback<JsonObject> {
-                    override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                         if (response.isSuccessful) {
-                             onMainDispatcher {
-                                 finish()
-                             }
-                         }
-                    }
-                    override fun onFailure(call: Call<JsonObject>, t: Throwable) {
-                    }
-                })
-            }
+            ApiClient.service.forget(email, password, code).enqueue(object: Callback<JsonObject> {
+                override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                     if (response.isSuccessful) {
+                         Toast.makeText(this@ForgotPasswordActivity, "Password reset successful", Toast.LENGTH_SHORT).show()
+                         finish()
+                     } else {
+                         Toast.makeText(this@ForgotPasswordActivity, "Reset failed", Toast.LENGTH_SHORT).show()
+                     }
+                }
+                override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                    Toast.makeText(this@ForgotPasswordActivity, "Network error", Toast.LENGTH_SHORT).show()
+                }
+            })
         }
     }
 }
