@@ -31,7 +31,9 @@ jobs:
           go-version: ^1.25
       - name: Native Build
         if: steps.cache.outputs.cache-hit != 'true'
-        run: ./run lib core
+        run: |
+          chmod +x run
+          ./run lib core
 
   build:
     name: Build OSS APK
@@ -58,24 +60,17 @@ jobs:
       - name: Gradle Build
         env:
           BUILD_PLUGIN: none
-          LOCAL_PROPERTIES_VAL: ${{ secrets.LOCAL_PROPERTIES }}
         run: |
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
           echo "ndk.dir=${ANDROID_HOME}/ndk/25.0.8775105" >> local.properties
           
-          if [ -n "$LOCAL_PROPERTIES_VAL" ]; then
-            export LOCAL_PROPERTIES="$LOCAL_PROPERTIES_VAL"
-          fi
-          
+          chmod +x run
           ./run init action gradle
           
+          chmod +x gradlew
           # Try building Debug as it is safer for generic CI without secrets
           ./gradlew app:assembleOssDebug
-          
-          APK=$(find app/build/outputs/apk -name '*debug.apk')
-          APK=$(dirname $APK)
-          echo "APK=$APK" >> $GITHUB_ENV
       - uses: actions/upload-artifact@v4
         with:
           name: Debug-APKs
-          path: ${{ env.APK }}
+          path: app/build/outputs/apk/oss/debug/*.apk
