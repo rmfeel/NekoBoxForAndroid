@@ -2,6 +2,7 @@ package moe.matsuri.nb4a.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.net.Uri
 import android.util.Base64
 import libcore.StringBox
 import java.io.ByteArrayOutputStream
@@ -13,6 +14,22 @@ import java.util.zip.Deflater
 import java.util.zip.Inflater
 
 object Util {
+
+    fun getContentFromUri(context: Context, uri: Uri): String {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val outputStream = ByteArrayOutputStream()
+                val buffer = ByteArray(4096)
+                var bytesRead: Int
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                }
+                outputStream.toString("UTF-8")
+            } ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
 
     /**
      * 取两个文本之间的文本值
