@@ -20,7 +20,7 @@ import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceDataStore
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.materialswitch.MaterialSwitch
+import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.snackbar.Snackbar
 import io.nekohasekai.sagernet.BuildConfig
 import io.nekohasekai.sagernet.GroupType
@@ -58,7 +58,7 @@ class MainActivity : ThemedActivity(),
     OnPreferenceDataStoreChangeListener {
 
     private lateinit var bottomNav: BottomNavigationView
-    private lateinit var vpnSwitch: MaterialSwitch
+    private lateinit var vpnSwitch: SwitchCompat
     private lateinit var vpnStatusText: TextView
     private lateinit var mainContainer: View
 
