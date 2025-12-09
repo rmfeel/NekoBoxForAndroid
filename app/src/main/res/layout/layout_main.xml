@@ -47,7 +47,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minWidth="52dp"
-                    android:minHeight="32dp" />
+                    android:minHeight="32dp"
+                    android:showText="false"
+                    app:showText="false" />
 
             </LinearLayout>
 
