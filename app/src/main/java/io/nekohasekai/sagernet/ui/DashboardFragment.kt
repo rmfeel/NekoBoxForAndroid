@@ -1,5 +1,6 @@
 package io.nekohasekai.sagernet.ui
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -7,18 +8,39 @@ import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.gson.JsonObject
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.api.ApiClient
 import io.nekohasekai.sagernet.database.DataStore
+import io.nekohasekai.sagernet.database.ProfileManager
+import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.net.URLEncoder
 
 class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
+
+    private val selectProfileForNode = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val profileId = result.data?.getLongExtra(ProfileSelectActivity.EXTRA_PROFILE_ID, -1L) ?: -1L
+            if (profileId > 0) {
+                // Set the selected profile
+                val old = DataStore.selectedProxy
+                DataStore.selectedProxy = profileId
+                runOnDefaultDispatcher {
+                    ProfileManager.postUpdate(old, true)
+                    ProfileManager.postUpdate(profileId, true)
+                }
+                Toast.makeText(requireContext(), "Node selected", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -36,8 +58,8 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
 
         val nodeSelectorButton = view.findViewById<android.widget.Button>(R.id.nodeSelectorButton)
         nodeSelectorButton.setOnClickListener {
-            val intent = Intent(requireContext(), ProfileSelectActivity::class.java)
-            startActivity(intent)
+            // Use startActivityForResult to receive the selected profile
+            selectProfileForNode.launch(Intent(requireContext(), ProfileSelectActivity::class.java))
         }
 
         val purchaseButton = view.findViewById<android.widget.Button>(R.id.purchaseButton)
@@ -54,6 +76,11 @@ class DashboardFragment : ToolbarFragment(R.layout.layout_dashboard) {
             if (DataStore.serviceState.canStop) {
                 SagerNet.stopService()
             } else {
+                // Check if there is a selected profile
+                if (DataStore.selectedProxy == 0L) {
+                    Toast.makeText(requireContext(), "Please select a node first", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 val intent = Intent(requireContext(), VpnRequestActivity::class.java)
                 requireContext().startActivity(intent)
             }

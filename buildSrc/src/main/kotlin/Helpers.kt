@@ -170,10 +170,11 @@ fun Project.setupApp() {
             reset()
             isEnable = true
             isUniversalApk = false
-            include("armeabi-v7a")
+            // Only build arm64-v8a for faster builds
             include("arm64-v8a")
-            include("x86")
-            include("x86_64")
+            // include("armeabi-v7a")
+            // include("x86")
+            // include("x86_64")
         }
 
         flavorDimensions += "vendor"
