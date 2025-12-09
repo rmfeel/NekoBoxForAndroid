@@ -72,6 +72,25 @@
             android:name="io.nekohasekai.sagernet.ui.BlankActivity"
             android:configChanges="uiMode" />
 
+        <!-- Auth Activities -->
+        <activity
+            android:name="io.nekohasekai.sagernet.ui.auth.LoginActivity"
+            android:configChanges="uiMode"
+            android:exported="false"
+            android:theme="@style/Theme.SagerNet" />
+
+        <activity
+            android:name="io.nekohasekai.sagernet.ui.auth.RegisterActivity"
+            android:configChanges="uiMode"
+            android:exported="false"
+            android:theme="@style/Theme.SagerNet" />
+
+        <activity
+            android:name="io.nekohasekai.sagernet.ui.auth.ForgotPasswordActivity"
+            android:configChanges="uiMode"
+            android:exported="false"
+            android:theme="@style/Theme.SagerNet" />
+
         <activity
             android:name="io.nekohasekai.sagernet.ui.MainActivity"
             android:configChanges="uiMode"
