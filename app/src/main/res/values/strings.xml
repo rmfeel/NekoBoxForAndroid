@@ -8,6 +8,12 @@
     <string name="telegram">Telegram update channel</string>
     <string name="oss_licenses">Open source licenses</string>
     <string name="app_version">Version</string>
+    
+    <!-- Auth Screen -->
+    <string name="server_username">Email</string>
+    <string name="server_password">Password</string>
+    <string name="title_dashboard">Dashboard</string>
+    
     <string name="version_x">Version (%s)</string>
     <string name="logcat">Export debug information</string>
     <string name="menu_configuration">Configuration</string>
